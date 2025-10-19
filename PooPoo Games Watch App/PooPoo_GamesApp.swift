@@ -2,7 +2,7 @@
 //  PooPoo_GamesApp.swift
 //  PooPoo Games Watch App
 //
-//  Created by Admin on 10/18/25.
+//  Created by Renaud Montes on 10/18/25.
 //
 
 import SwiftUI
