@@ -26,7 +26,7 @@ struct RaceTheLooView: View {
                 Button(action: {
                     print("Hello World from Race the Loo!")
                 }) {
-                    Text("Hello World")
+                    Text("Start Game")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)

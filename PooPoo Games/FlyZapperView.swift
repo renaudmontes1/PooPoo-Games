@@ -111,6 +111,7 @@ class GameState: ObservableObject {
 
 struct FlyZapperView: View {
     @StateObject private var gameState = GameState()
+    @Environment(\.dismiss) var dismiss
     
     var body: some View {
         GeometryReader { geometry in
@@ -192,6 +193,17 @@ struct FlyZapperView: View {
                         .foregroundColor(.white)
                         .position(x: geometry.size.width / 2, y: 50)
                     
+                    // Back button in top left during gameplay
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .foregroundColor(.white)
+                            .font(.system(size: 24))
+                            .padding(12)
+                            .background(Color.brown.opacity(0.7))
+                            .clipShape(Circle())
+                    }
+                    .position(x: 40, y: 50)
+                    
                     // Fly
                     Text("🪰")
                         .font(.system(size: 60))
@@ -224,6 +236,17 @@ struct FlyZapperView: View {
                             .background(Color.green)
                             .cornerRadius(15)
                             .shadow(radius: 10)
+                            
+                            Button("Home") {
+                                dismiss()
+                            }
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(width: 250, height: 60)
+                            .background(Color.brown)
+                            .cornerRadius(15)
+                            .shadow(radius: 10)
                         }
                         .padding()
                         .background(Color.black.opacity(0.8))
@@ -238,6 +261,9 @@ struct FlyZapperView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
+                        // Only allow tapping during active gameplay
+                        guard gameState.gamePhase == .playing else { return }
+                        
                         let location = value.location
                         // Check if we hit the fly
                         let hitDistance: CGFloat = 50

@@ -25,7 +25,7 @@ struct BirdsOnTheWireView: View {
             Button(action: {
                 print("Hello World from Birds on the Wire!")
             }) {
-                Text("Hello World")
+                Text("start Game")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)

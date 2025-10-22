@@ -2,7 +2,7 @@
 //  FlyZapperView.swift
 //  PooPoo Games Watch App
 //
-//  Created by Admin on 10/18/25.
+//  Created by Renaud and Remi on 10/18/25.
 //
 
 import SwiftUI
@@ -111,6 +111,7 @@ class GameState: ObservableObject {
 
 struct FlyZapperView: View {
     @StateObject private var gameState = GameState()
+    @Environment(\.dismiss) var dismiss
     
     var body: some View {
         GeometryReader { geometry in
@@ -177,6 +178,17 @@ struct FlyZapperView: View {
                         .foregroundColor(.white)
                         .position(x: geometry.size.width / 2, y: 20)
                     
+                    // Back button in top left during gameplay
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .foregroundColor(.white)
+                            .font(.system(size: 18))
+                            .padding(8)
+                            .background(Color.brown.opacity(0.7))
+                            .clipShape(Circle())
+                    }
+                    .position(x: 20, y: 20)
+                    
                     // Fly
                     Text("🪰")
                         .font(.system(size: 30))
@@ -190,14 +202,21 @@ struct FlyZapperView: View {
                     
                     // Game Over overlay
                     if gameState.gamePhase == .gameOver {
-                        VStack {
+                        VStack(spacing: 10) {
                             Text("Game Over!")
                                 .font(.title2)
                                 .foregroundColor(.red)
+                            
                             Button("Play Again") {
                                 gameState.startGame()
                             }
                             .buttonStyle(.bordered)
+                            
+                            Button("Home") {
+                                dismiss()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.brown)
                         }
                     }
                 }
@@ -209,6 +228,9 @@ struct FlyZapperView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
+                        // Only allow tapping during active gameplay
+                        guard gameState.gamePhase == .playing else { return }
+                        
                         let location = value.location
                         // Check if we hit the fly
                         let hitDistance: CGFloat = 30

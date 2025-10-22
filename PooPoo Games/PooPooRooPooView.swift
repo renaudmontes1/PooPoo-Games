@@ -26,7 +26,7 @@ struct PooPooRooPooView: View {
                 Button(action: {
                     print("Hello World from Poo Poo Roo Poo!")
                 }) {
-                    Text("Hello World")
+                    Text("Start Game")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
