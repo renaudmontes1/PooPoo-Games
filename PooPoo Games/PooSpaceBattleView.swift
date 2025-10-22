@@ -41,7 +41,6 @@ struct Bullet: Identifiable {
 class SpaceBattleState: ObservableObject {
     enum GamePhase {
         case welcome
-        case weaponSelect
         case playing
         case gameOver
     }
@@ -70,6 +69,8 @@ class SpaceBattleState: ObservableObject {
     }
     
     func startGame() {
+        gamePhase = .playing
+        selectedWeapon = .machineGun
         score = 0
         lives = 3
         enemies = []
@@ -320,7 +321,7 @@ struct PooSpaceBattleView: View {
                             .multilineTextAlignment(.center)
                         
                         Button("START") {
-                            gameState.gamePhase = .weaponSelect
+                            gameState.startGame()
                         }
                         .font(.title)
                         .fontWeight(.bold)
@@ -338,55 +339,6 @@ struct PooSpaceBattleView: View {
                         .background(Color.brown)
                         .cornerRadius(10)
                     }
-                } else if gameState.gamePhase == .weaponSelect {
-                    // Weapon Selection
-                    VStack(spacing: 40) {
-                        Text("SELECT WEAPON")
-                            .font(.system(size: 32, weight: .bold, design: .monospaced))
-                            .foregroundColor(.green)
-                        
-                        VStack(spacing: 20) {
-                            Button(action: { gameState.selectWeapon(.machineGun) }) {
-                                VStack(spacing: 10) {
-                                    Text("🔫")
-                                        .font(.system(size: 60))
-                                    Text("MACHINE GUN")
-                                        .font(.headline)
-                                    Text("Fast fire rate\nDestroy on hit")
-                                        .font(.caption)
-                                        .multilineTextAlignment(.center)
-                                }
-                                .foregroundColor(.white)
-                                .frame(width: 250, height: 140)
-                                .background(Color.blue.opacity(0.3))
-                                .cornerRadius(15)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 15)
-                                        .stroke(Color.blue, lineWidth: 2)
-                                )
-                            }
-                            
-                            Button(action: { gameState.selectWeapon(.yokeShooter) }) {
-                                VStack(spacing: 10) {
-                                    Text("🍳")
-                                        .font(.system(size: 60))
-                                    Text("YOKE SHOOTER")
-                                        .font(.headline)
-                                    Text("Splits poos\ninto smaller ones")
-                                        .font(.caption)
-                                        .multilineTextAlignment(.center)
-                                }
-                                .foregroundColor(.white)
-                                .frame(width: 250, height: 140)
-                                .background(Color.orange.opacity(0.3))
-                                .cornerRadius(15)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 15)
-                                        .stroke(Color.orange, lineWidth: 2)
-                                )
-                            }
-                        }
-                    }
                 } else if gameState.gamePhase == .gameOver {
                     // Game Over Screen
                     VStack(spacing: 30) {
@@ -399,7 +351,7 @@ struct PooSpaceBattleView: View {
                             .foregroundColor(.green)
                         
                         Button("PLAY AGAIN") {
-                            gameState.gamePhase = .weaponSelect
+                            gameState.startGame()
                         }
                         .font(.title2)
                         .fontWeight(.bold)

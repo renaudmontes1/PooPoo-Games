@@ -41,7 +41,6 @@ struct Bullet: Identifiable {
 class SpaceBattleState: ObservableObject {
     enum GamePhase {
         case welcome
-        case weaponSelect
         case playing
         case gameOver
     }
@@ -66,6 +65,8 @@ class SpaceBattleState: ObservableObject {
     }
     
     func startGame() {
+        gamePhase = .playing
+        selectedWeapon = .machineGun
         score = 0
         lives = 3
         enemies = []
@@ -270,7 +271,7 @@ struct PooSpaceBattleView: View {
                             .multilineTextAlignment(.center)
                         
                         Button("START") {
-                            gameState.gamePhase = .weaponSelect
+                            gameState.startGame()
                         }
                         .buttonStyle(.bordered)
                         
@@ -279,43 +280,6 @@ struct PooSpaceBattleView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.brown)
-                    }
-                } else if gameState.gamePhase == .weaponSelect {
-                    ScrollView {
-                        VStack(spacing: 15) {
-                            Text("SELECT")
-                                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                .foregroundColor(.green)
-                            
-                            Button(action: { gameState.selectWeapon(.machineGun) }) {
-                                VStack(spacing: 5) {
-                                    Text("🔫")
-                                        .font(.title)
-                                    Text("MACHINE GUN")
-                                        .font(.caption2)
-                                        .fontWeight(.bold)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(Color.blue.opacity(0.3))
-                                .cornerRadius(8)
-                            }
-                            
-                            Button(action: { gameState.selectWeapon(.yokeShooter) }) {
-                                VStack(spacing: 5) {
-                                    Text("🍳")
-                                        .font(.title)
-                                    Text("YOKE SHOOTER")
-                                        .font(.caption2)
-                                        .fontWeight(.bold)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(Color.orange.opacity(0.3))
-                                .cornerRadius(8)
-                            }
-                        }
-                        .padding()
                     }
                 } else if gameState.gamePhase == .gameOver {
                     VStack(spacing: 15) {
@@ -328,7 +292,7 @@ struct PooSpaceBattleView: View {
                             .foregroundColor(.green)
                         
                         Button("AGAIN") {
-                            gameState.gamePhase = .weaponSelect
+                            gameState.startGame()
                         }
                         .buttonStyle(.bordered)
                         

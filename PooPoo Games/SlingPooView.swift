@@ -8,7 +8,7 @@
 import SwiftUI
 import Combine
 
-// Flying Poo
+// Flying Po`o
 struct FlyingPoo: Identifiable {
     let id = UUID()
     var position: CGPoint
@@ -52,7 +52,7 @@ class SlingPooGameState: ObservableObject {
     func startGame() {
         score = 0
         level = 1
-        soapsRemaining = 3
+        soapsRemaining = 999  // Unlimited soaps
         poos = []
         soap = nil
         dragPosition = nil
@@ -194,7 +194,7 @@ class SlingPooGameState: ObservableObject {
     
     func levelComplete() {
         level += 1
-        soapsRemaining = 3
+        soapsRemaining = 999  // Unlimited soaps
         spawnPoos()
     }
     
@@ -220,16 +220,6 @@ struct SlingPooView: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
-                ForEach(0..<8, id: \.self) { i in
-                    Text("☁️")
-                        .font(.system(size: CGFloat.random(in: 30...50)))
-                        .position(
-                            x: CGFloat.random(in: 0...geometry.size.width),
-                            y: CGFloat.random(in: 50...200)
-                        )
-                        .opacity(0.5)
-                }
                 
                 if gameState.gamePhase == .welcome {
                     VStack(spacing: 30) {
@@ -322,16 +312,6 @@ struct SlingPooView: View {
                             .cornerRadius(10)
                             
                             Spacer()
-                            
-                            HStack(spacing: 5) {
-                                ForEach(0..<gameState.soapsRemaining, id: \.self) { _ in
-                                    Text("🧼")
-                                        .font(.system(size: 20))
-                                }
-                            }
-                            .padding(10)
-                            .background(Color.brown.opacity(0.7))
-                            .cornerRadius(10)
                         }
                         .padding()
                         
@@ -390,7 +370,7 @@ struct SlingPooView: View {
                                     path.addLine(to: CGPoint(x: x, y: y))
                                 }
                             }
-                            .stroke(Color.white.opacity(0.5), style: StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                            .stroke(Color.black, lineWidth: 4)
                         } else if gameState.soap == nil && gameState.soapsRemaining > 0 {
                             Text("🧼")
                                 .font(.system(size: 30))

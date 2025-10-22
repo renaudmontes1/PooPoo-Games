@@ -52,7 +52,7 @@ class WatchSlingPooGameState: ObservableObject {
     func startGame() {
         score = 0
         level = 1
-        soapsRemaining = 3
+        soapsRemaining = 999  // Unlimited soaps
         poos = []
         soap = nil
         dragPosition = nil
@@ -204,7 +204,7 @@ class WatchSlingPooGameState: ObservableObject {
     
     func levelComplete() {
         level += 1
-        soapsRemaining = 3
+        soapsRemaining = 999  // Unlimited soaps
         spawnPoos()
     }
     
@@ -294,13 +294,6 @@ struct SlingPooView: View {
                             }
                             
                             Spacer()
-                            
-                            HStack(spacing: 2) {
-                                ForEach(0..<gameState.soapsRemaining, id: \.self) { _ in
-                                    Text("🧼")
-                                        .font(.system(size: 10))
-                                }
-                            }
                         }
                         .padding(5)
                         .background(Color.brown.opacity(0.5))
