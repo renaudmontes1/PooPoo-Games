@@ -2,7 +2,7 @@
 //  YuckyCardSortView.swift
 //  PooPoo Games Watch App
 //
-//  Created by Admin on 10/18/25.
+//  Created by Emilio Montes on 10/18/25.
 //
 
 import SwiftUI
@@ -32,7 +32,7 @@ class CardGameState: ObservableObject {
     @Published var isCheckingMatch = false
     
     let yuckyEmojis = ["💩", "🤮", "🦠", "🧻", "🪰", "🪳", "🕷️", "🦟", "🐛", "🧟"]
-    let maxLevel = 1000
+    let maxLevel = 5
     
     func startGame() {
         currentLevel = 1
@@ -92,11 +92,14 @@ class CardGameState: ObservableObject {
     }
     
     func checkLevelComplete() {
-        if cards.allSatisfy({ $0.isMatched }) {
-            if currentLevel >= maxLevel {
-                gamePhase = .gameComplete
-            } else {
-                gamePhase = .levelComplete
+        if cards.allSatisfy({ $0.isMatched }){
+            // Wait 1 second before showing level complete
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if self.currentLevel >= self.maxLevel {
+                    self.gamePhase = .gameComplete
+                } else {
+                    self.gamePhase = .levelComplete
+                }
             }
         }
     }
@@ -172,7 +175,7 @@ struct YuckyCardSortView: View {
                         .fontWeight(.bold)
                         .foregroundColor(.yellow)
                     
-                    Text("All 1000 levels!")
+                    Text("All levels!")
                         .font(.caption)
                         .foregroundColor(.white)
                     
@@ -213,25 +216,39 @@ struct YuckyCardSortView: View {
                     }
                     .padding(.horizontal, 5)
                     
-                    // Card Grid
-                    let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 2)
+                    // Card Grid - more columns for higher levels
+                    let columnsCount = columnsForLevel(gameState.currentLevel)
+                    let columns = Array(repeating: GridItem(.fixed(30), spacing: 3), count: columnsCount)
                     
                     ScrollView {
-                        LazyVGrid(columns: columns, spacing: 4) {
+                        LazyVGrid(columns: columns, spacing: 1) {
                             ForEach(Array(gameState.cards.enumerated()), id: \.element.id) { index, card in
                                 WatchCardView(card: card)
-                                    .aspectRatio(0.7, contentMode: .fit)
+                                    .frame(width: 30, height: 35)
                                     .onTapGesture {
                                         gameState.flipCard(at: index)
                                     }
                             }
                         }
-                        .padding(5)
+                        .padding(1)
                     }
                 }
             }
         }
         .navigationBarBackButtonHidden(true)
+    }
+    
+    func columnsForLevel(_ level: Int) -> Int {
+        // Level 1: 4 cards (2 pairs) = 2 columns
+        // Level 2: 8 cards (4 pairs) = 3 columns
+        // Level 3+: 12+ cards = 4 columns
+        if level == 1 {
+            return 2
+        } else if level == 2 {
+            return 3
+        } else {
+            return 4
+        }
     }
 }
 
@@ -241,14 +258,14 @@ struct WatchCardView: View {
     var body: some View {
         ZStack {
             if card.isFaceUp || card.isMatched {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 4)
                     .fill(card.isMatched ? Color.green.opacity(0.3) : Color.white)
                     .overlay(
                         Text(card.emoji)
-                            .font(.system(size: 24))
+                            .font(.system(size: 20))
                     )
             } else {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 4)
                     .fill(
                         LinearGradient(
                             gradient: Gradient(colors: [Color.brown, Color.brown.opacity(0.7)]),
@@ -258,12 +275,12 @@ struct WatchCardView: View {
                     )
                     .overlay(
                         Text("💩")
-                            .font(.system(size: 18))
+                            .font(.system(size: 16))
                             .opacity(0.5)
                     )
             }
         }
-        .shadow(radius: 2)
+        .shadow(radius: 0.5)
     }
 }
 

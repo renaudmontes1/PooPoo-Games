@@ -2,7 +2,7 @@
 //  PooSpaceBattleView.swift
 //  PooPoo Games
 //
-//  Created by Admin on 10/18/25.
+//  Created by Emilio Montes on 10/18/25.
 //
 
 import SwiftUI
@@ -161,8 +161,8 @@ class SpaceBattleState: ObservableObject {
         checkCollisions()
         checkPlayerHit()
         
-        // Check if enemies reached bottom
-        if enemies.contains(where: { $0.position.y > screenBounds.height - 100 }) {
+        // Check if enemies reached very bottom (give more space)
+        if enemies.contains(where: { $0.position.y > screenBounds.height - 30 }) {
             gameOver()
         }
         

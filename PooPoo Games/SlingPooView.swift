@@ -2,7 +2,7 @@
 //  SlingPooView.swift
 //  PooPoo Games
 //
-//  Created by Admin on 10/18/25.
+//  Created by Emilio Montes on 10/18/25.
 //
 
 import SwiftUI
@@ -40,6 +40,7 @@ class SlingPooGameState: ObservableObject {
     @Published var score: Int = 0
     @Published var level: Int = 1
     @Published var soapsRemaining: Int = 3
+    @Published var maxSoapsPerLevel: Int = 10
     @Published var slingshotPosition: CGPoint = .zero
     @Published var dragPosition: CGPoint?
     @Published var isAiming: Bool = false
@@ -52,7 +53,8 @@ class SlingPooGameState: ObservableObject {
     func startGame() {
         score = 0
         level = 1
-        soapsRemaining = 999  // Unlimited soaps
+        soapsRemaining = 10
+        maxSoapsPerLevel = 10
         poos = []
         soap = nil
         dragPosition = nil
@@ -138,7 +140,9 @@ class SlingPooGameState: ObservableObject {
             if !poos[i].isHit {
                 let distance = hypot(currentSoap.position.x - poos[i].position.x,
                                    currentSoap.position.y - poos[i].position.y)
-                if distance < 30 {
+                // Increased collision radius - soap size + poo size
+                let collisionRadius = 40 + (poos[i].size / 2)
+                if distance < collisionRadius {
                     poos[i].isHit = true
                     score += 10 * level
                     soap = nil
@@ -169,6 +173,15 @@ class SlingPooGameState: ObservableObject {
         )
         
         let distance = sqrt(pullVector.dx * pullVector.dx + pullVector.dy * pullVector.dy)
+        
+        // Require minimum pull distance to prevent accidental launches
+        guard distance > 50 else {
+            // Not pulled far enough - cancel
+            isAiming = false
+            dragPosition = nil
+            return
+        }
+        
         let limitedDistance = min(distance, maxPullDistance)
         let scale = limitedDistance / max(distance, 1)
         
@@ -194,11 +207,13 @@ class SlingPooGameState: ObservableObject {
     
     func levelComplete() {
         level += 1
-        soapsRemaining = 999  // Unlimited soaps
+        soapsRemaining = 10  // Reset soaps for new level
+        maxSoapsPerLevel = 10
         spawnPoos()
     }
     
     func checkGameOver() {
+        // Game over if no soaps left and still have poos
         if soapsRemaining <= 0 && soap == nil && !poos.isEmpty {
             gamePhase = .gameOver
             gameTimer?.invalidate()
@@ -363,8 +378,8 @@ struct SlingPooView: View {
                             )
                             Path { path in
                                 path.move(to: gameState.slingshotPosition)
-                                for i in 1...8 {
-                                    let t = CGFloat(i) * 0.1
+                                for i in 1...15 {
+                                    let t = CGFloat(i) * 0.08
                                     let x = gameState.slingshotPosition.x + pullVector.dx * 0.15 * t * 50
                                     let y = gameState.slingshotPosition.y + pullVector.dy * 0.15 * t * 50 + 0.3 * t * t * 250
                                     path.addLine(to: CGPoint(x: x, y: y))

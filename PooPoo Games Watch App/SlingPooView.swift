@@ -2,7 +2,7 @@
 //  SlingPooView.swift
 //  PooPoo Games Watch App
 //
-//  Created by Admin on 10/18/25.
+//  Created by Emilio Montes on 10/18/25.
 //
 
 import SwiftUI
@@ -40,6 +40,7 @@ class WatchSlingPooGameState: ObservableObject {
     @Published var score: Int = 0
     @Published var level: Int = 1
     @Published var soapsRemaining: Int = 3
+    @Published var maxSoapsPerLevel: Int = 10
     @Published var slingshotPosition: CGPoint = .zero
     @Published var dragPosition: CGPoint?
     @Published var isAiming: Bool = false
@@ -52,7 +53,8 @@ class WatchSlingPooGameState: ObservableObject {
     func startGame() {
         score = 0
         level = 1
-        soapsRemaining = 999  // Unlimited soaps
+        soapsRemaining = 10
+        maxSoapsPerLevel = 10
         poos = []
         soap = nil
         dragPosition = nil
@@ -149,7 +151,9 @@ class WatchSlingPooGameState: ObservableObject {
             if !poos[i].isHit {
                 let distance = hypot(currentSoap.position.x - poos[i].position.x,
                                    currentSoap.position.y - poos[i].position.y)
-                if distance < 20 {
+                // Increased collision radius - soap size + poo size
+                let collisionRadius = 25 + (poos[i].size / 2)
+                if distance < collisionRadius {
                     // Hit!
                     poos[i].isHit = true
                     score += 10 * level
@@ -181,8 +185,18 @@ class WatchSlingPooGameState: ObservableObject {
             dy: slingshotPosition.y - drag.y
         )
         
-        // Limit pull distance
+        // Calculate pull distance
         let distance = sqrt(pullVector.dx * pullVector.dx + pullVector.dy * pullVector.dy)
+        
+        // Require minimum pull distance to prevent accidental launches
+        guard distance > 25 else {
+            // Not pulled far enough - cancel
+            isAiming = false
+            dragPosition = nil
+            return
+        }
+        
+        // Limit pull distance
         let limitedDistance = min(distance, maxPullDistance)
         let scale = limitedDistance / max(distance, 1)
         
@@ -204,11 +218,13 @@ class WatchSlingPooGameState: ObservableObject {
     
     func levelComplete() {
         level += 1
-        soapsRemaining = 999  // Unlimited soaps
+        soapsRemaining = 10  // Reset soaps for new level
+        maxSoapsPerLevel = 10
         spawnPoos()
     }
     
     func checkGameOver() {
+        // Game over if no soaps left and still have poos
         if soapsRemaining <= 0 && soap == nil && !poos.isEmpty {
             gamePhase = .gameOver
             gameTimer?.invalidate()
@@ -344,6 +360,22 @@ struct SlingPooView: View {
                             Text("🧼")
                                 .font(.system(size: 14))
                                 .position(drag)
+                            
+                            // Trajectory line
+                            let pullVector = CGVector(
+                                dx: gameState.slingshotPosition.x - drag.x,
+                                dy: gameState.slingshotPosition.y - drag.y
+                            )
+                            Path { path in
+                                path.move(to: gameState.slingshotPosition)
+                                for i in 1...15 {
+                                    let t = CGFloat(i) * 0.08
+                                    let x = gameState.slingshotPosition.x + pullVector.dx * 0.15 * t * 50
+                                    let y = gameState.slingshotPosition.y + pullVector.dy * 0.15 * t * 50 + 0.2 * t * t * 250
+                                    path.addLine(to: CGPoint(x: x, y: y))
+                                }
+                            }
+                            .stroke(Color.black, lineWidth: 2)
                         } else if gameState.soap == nil && gameState.soapsRemaining > 0 {
                             // Soap ready to launch
                             Text("🧼")
@@ -372,7 +404,7 @@ struct SlingPooView: View {
                                 value.location.x - gameState.slingshotPosition.x,
                                 value.location.y - gameState.slingshotPosition.y
                             )
-                            if distance < 70 {
+                            if distance < 100 {  // Increased from 70 to 100 for easier touch
                                 if !gameState.isAiming {
                                     gameState.startAiming(at: value.location)
                                 } else {

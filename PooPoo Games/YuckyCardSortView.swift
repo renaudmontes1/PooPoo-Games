@@ -32,7 +32,7 @@ class CardGameState: ObservableObject {
     @Published var isCheckingMatch = false
     
     let yuckyEmojis = ["💩", "🤮", "🦠", "🧻", "🪰", "🪳", "🕷️", "🦟", "🐛", "🧟", "👻", "💀", "🤢", "🤧", "🩸", "🦴"]
-    let maxLevel = 1000
+    let maxLevel = 10
     
     func startGame() {
         currentLevel = 1
@@ -93,10 +93,13 @@ class CardGameState: ObservableObject {
     
     func checkLevelComplete() {
         if cards.allSatisfy({ $0.isMatched }) {
-            if currentLevel >= maxLevel {
-                gamePhase = .gameComplete
-            } else {
-                gamePhase = .levelComplete
+            // Wait 1 second before showing level complete
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if self.currentLevel >= self.maxLevel {
+                    self.gamePhase = .gameComplete
+                } else {
+                    self.gamePhase = .levelComplete
+                }
             }
         }
     }
@@ -129,7 +132,7 @@ struct YuckyCardSortView: View {
                         .font(.title3)
                         .foregroundColor(.secondary)
                     
-                    Text("Start with 4 cards\nDouble each level up to 1000!")
+                    Text("Start with 4 cards\nDouble each level up to 10!")
                         .font(.headline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -191,9 +194,8 @@ struct YuckyCardSortView: View {
                         .font(.system(size: 48, weight: .bold))
                         .foregroundColor(.yellow)
                     
-                    Text("Completed all 1000 levels!")
-                        .font(.title2)
-                        .foregroundColor(.white)
+                    Text("Completed all 10 levels!")
+                        .font(.title2)                        .foregroundColor(.white)
                     
                     Button("Play Again") {
                         gameState.startGame()
