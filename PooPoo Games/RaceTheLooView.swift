@@ -10,6 +10,64 @@ import Combine
 
 // MARK: - Models
 
+enum Difficulty {
+    case easy, medium, hard
+    
+    var aiAccelerationChance: Double {
+        switch self {
+        case .easy: return 0.40
+        case .medium: return 0.20
+        case .hard: return 0.10
+        }
+    }
+    
+    var aiAcceleration: CGFloat {
+        switch self {
+        case .easy: return 0.035
+        case .medium: return 0.055
+        case .hard: return 0.075
+        }
+    }
+    
+    var aiMaxSpeed: CGFloat {
+        switch self {
+        case .easy: return 0.9
+        case .medium: return 1.2
+        case .hard: return 1.6
+        }
+    }
+    
+    var displayName: String {
+        switch self {
+        case .easy: return "Easy"
+        case .medium: return "Medium"
+        case .hard: return "Hard"
+        }
+    }
+}
+
+enum TrackType {
+    case straightaway, sCurve, hairpin, chicane
+    
+    var displayName: String {
+        switch self {
+        case .straightaway: return "Straightaway"
+        case .sCurve: return "S-Curve Circuit"
+        case .hairpin: return "Hairpin Turn"
+        case .chicane: return "Chicane Challenge"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .straightaway: return "Classic straight track"
+        case .sCurve: return "Winding S-curves"
+        case .hairpin: return "Sharp hairpin turns"
+        case .chicane: return "Quick left-right chicanes"
+        }
+    }
+}
+
 struct Racer {
     var position: CGFloat = 0  // 0 to 500 (finish line)
     var lanePosition: CGFloat = 0.5  // 0 = left, 0.5 = center, 1 = right
@@ -21,7 +79,11 @@ struct Racer {
 
 class RaceGameState: ObservableObject {
     enum GamePhase {
-        case welcome, racing, finished
+        case welcome, selectDifficulty, selectTrack, racing, finished
+    }
+    
+    enum CrashType {
+        case wall, collision
     }
     
     @Published var gamePhase: GamePhase = .welcome
@@ -29,6 +91,9 @@ class RaceGameState: ObservableObject {
     @Published var pooRacer = Racer()
     @Published var raceProgress: CGFloat = 0
     @Published var winner: String = ""
+    @Published var selectedDifficulty: Difficulty = .medium
+    @Published var selectedTrack: TrackType = .straightaway
+    @Published var crashType: CrashType?
     
     private var gameTimer: Timer?
     private var aiTimer: Timer?
@@ -38,6 +103,7 @@ class RaceGameState: ObservableObject {
         pooRacer = Racer()
         raceProgress = 0
         winner = ""
+        crashType = nil
         gamePhase = .racing
         
         startGameLoop()
@@ -75,6 +141,34 @@ class RaceGameState: ObservableObject {
         playerRacer.position = max(0, min(500, playerRacer.position))
         pooRacer.position = max(0, min(500, pooRacer.position))
         
+        // Check for wall collisions
+        if checkWallCollision(racer: playerRacer) {
+            winner = "Poo"
+            crashType = .wall
+            finishRace()
+            return
+        }
+        
+        if checkWallCollision(racer: pooRacer) {
+            winner = "You"
+            crashType = .wall
+            finishRace()
+            return
+        }
+        
+        // Check for collision between racers
+        if checkRacerCollision() {
+            // Both crash - whoever is ahead wins
+            if playerRacer.position > pooRacer.position {
+                winner = "You"
+            } else {
+                winner = "Poo"
+            }
+            crashType = .collision
+            finishRace()
+            return
+        }
+        
         // Check for winner
         if playerRacer.position >= 500 {
             winner = "You"
@@ -88,16 +182,151 @@ class RaceGameState: ObservableObject {
         raceProgress = max(playerRacer.position, pooRacer.position)
     }
     
-    func updateAI() {
-        // AI accelerates randomly (slower than before)
-        if Double.random(in: 0...1) > 0.4 {
-            pooRacer.speed = min(pooRacer.speed + 0.05, 0.9)
+    func checkWallCollision(racer: Racer) -> Bool {
+        // Don't check wall collisions at the very start
+        if racer.position < 10 {
+            return false
         }
         
-        // AI changes lanes randomly
-        if Double.random(in: 0...1) > 0.7 {
+        // Get the current turn amount for the racer's position
+        let turnAmount = getTurnAmountForPosition(progress: racer.position, trackType: selectedTrack)
+        
+        // Calculate the road boundaries at this position
+        // Road goes from 0.25 to 0.75 with turn offset
+        let roadLeftBoundary = 0.25 + turnAmount * 0.35
+        let roadRightBoundary = 0.75 + turnAmount * 0.35
+        
+        // Lane positions are 0.3, 0.5, 0.7
+        // Give more margin - only crash if WAY outside the road
+        let racerLeft = racer.lanePosition - 0.15  // Increased from 0.1 for more forgiveness
+        let racerRight = racer.lanePosition + 0.15
+        
+        // Add safety margin to road boundaries
+        let safeLeftBoundary = roadLeftBoundary - 0.05
+        let safeRightBoundary = roadRightBoundary + 0.05
+        
+        // Collision only if racer is significantly outside the road
+        return racerLeft < safeLeftBoundary || racerRight > safeRightBoundary
+    }
+    
+    func checkRacerCollision() -> Bool {
+        // Don't check collisions until racers have moved apart (first 2 seconds of race)
+        if playerRacer.position < 20 && pooRacer.position < 20 {
+            return false
+        }
+        
+        // Check if racers are close in position and in same lane
+        let positionDiff = abs(playerRacer.position - pooRacer.position)
+        let laneDiff = abs(playerRacer.lanePosition - pooRacer.lanePosition)
+        
+        // Collision only if they're within 5 units AND in exactly the same lane (not adjacent)
+        return positionDiff < 5 && laneDiff < 0.15
+    }
+    
+    func getTurnAmountForPosition(progress: CGFloat, trackType: TrackType) -> CGFloat {
+        switch trackType {
+        case .straightaway:
+            if progress < 200 {
+                return 0
+            } else if progress < 275 {
+                return (progress - 200) / 75.0
+            } else if progress < 350 {
+                return 1.0 - (progress - 275) / 75.0
+            } else {
+                return 0
+            }
+            
+        case .sCurve:
+            if progress < 100 {
+                return 0
+            } else if progress < 150 {
+                return (progress - 100) / 50.0
+            } else if progress < 200 {
+                return 1.0 - (progress - 150) / 50.0
+            } else if progress < 250 {
+                return -((progress - 200) / 50.0)
+            } else if progress < 300 {
+                return -(1.0 - (progress - 250) / 50.0)
+            } else if progress < 350 {
+                return (progress - 300) / 50.0
+            } else if progress < 400 {
+                return 1.0 - (progress - 350) / 50.0
+            } else {
+                return 0
+            }
+            
+        case .hairpin:
+            if progress < 150 {
+                return 0
+            } else if progress < 220 {
+                return ((progress - 150) / 70.0) * 1.5
+            } else if progress < 280 {
+                return 1.5
+            } else if progress < 350 {
+                return 1.5 - ((progress - 280) / 70.0) * 1.5
+            } else {
+                return 0
+            }
+            
+        case .chicane:
+            if progress < 120 {
+                return 0
+            } else if progress < 160 {
+                return -((progress - 120) / 40.0) * 0.8
+            } else if progress < 200 {
+                return -0.8 + ((progress - 160) / 40.0) * 1.6
+            } else if progress < 240 {
+                return 0.8 - ((progress - 200) / 40.0) * 1.6
+            } else if progress < 280 {
+                return -0.8 + ((progress - 240) / 40.0) * 0.8
+            } else if progress < 340 {
+                return -((progress - 280) / 30.0) * 0.6
+            } else if progress < 380 {
+                return -0.6 + ((progress - 340) / 40.0) * 1.2
+            } else if progress < 420 {
+                return 0.6 - ((progress - 380) / 40.0) * 0.6
+            } else {
+                return 0
+            }
+        }
+    }
+    
+    func updateAI() {
+        // AI accelerates based on difficulty level (< not > so lower threshold = more acceleration)
+        if Double.random(in: 0...1) < (1.0 - selectedDifficulty.aiAccelerationChance) {
+            pooRacer.speed = min(pooRacer.speed + selectedDifficulty.aiAcceleration, selectedDifficulty.aiMaxSpeed)
+        }
+        
+        // Smart lane selection based on track curves and player position
+        let currentTurn = getTurnAmountForPosition(progress: pooRacer.position, trackType: selectedTrack)
+        let positionDiff = abs(playerRacer.position - pooRacer.position)
+        let isPlayerClose = positionDiff < 15
+        
+        // First priority: Avoid walls by staying in safe lanes during turns
+        // More aggressive wall avoidance with better lane selection
+        if abs(currentTurn) > 0.2 {  // Lower threshold for earlier detection
+            // In a turn - always choose the safest lane
+            if currentTurn > 0 {
+                // Right turn - ALWAYS use left lane (0.3) which is furthest from right wall
+                pooRacer.lanePosition = 0.3
+            } else if currentTurn < 0 {
+                // Left turn - ALWAYS use right lane (0.7) which is furthest from left wall
+                pooRacer.lanePosition = 0.7
+            }
+        }
+        // Second priority: Avoid player collision
+        else if isPlayerClose && abs(playerRacer.lanePosition - pooRacer.lanePosition) < 0.2 {
+            // Player is close and in same lane - move to different lane!
             let lanes: [CGFloat] = [0.3, 0.5, 0.7]
-            pooRacer.lanePosition = lanes.randomElement() ?? 0.5
+            let availableLanes = lanes.filter { abs($0 - playerRacer.lanePosition) > 0.15 }
+            if !availableLanes.isEmpty {
+                pooRacer.lanePosition = availableLanes.randomElement() ?? 0.5
+            }
+        }
+        // Third priority: Stay in center on straights
+        else if abs(currentTurn) < 0.1 {
+            // On straight sections, prefer center lane for optimal positioning
+            pooRacer.lanePosition = 0.5
         }
     }
     
@@ -106,7 +335,7 @@ class RaceGameState: ObservableObject {
     }
     
     func brake() {
-        playerRacer.speed = max(playerRacer.speed - 0.25, 0)
+        playerRacer.speed = max(playerRacer.speed - 0.15, 0)
     }
     
     func steerLeft() {
@@ -137,6 +366,10 @@ struct RaceTheLooView: View {
                     RacingView(gameState: gameState, geometry: geometry)
                 } else if gameState.gamePhase == .finished {
                     FinishView(gameState: gameState, dismiss: dismiss)
+                } else if gameState.gamePhase == .selectDifficulty {
+                    DifficultySelectionView(gameState: gameState, dismiss: dismiss)
+                } else if gameState.gamePhase == .selectTrack {
+                    TrackSelectionView(gameState: gameState, dismiss: dismiss)
                 } else {
                     WelcomeView(gameState: gameState, dismiss: dismiss)
                 }
@@ -173,7 +406,7 @@ struct WelcomeView: View {
                     .padding(.horizontal)
                 
                 Button("START RACE") {
-                    gameState.startRace()
+                    gameState.gamePhase = .selectDifficulty
                 }
                 .font(.title2)
                 .fontWeight(.bold)
@@ -204,6 +437,206 @@ struct WelcomeView: View {
     }
 }
 
+// MARK: - Difficulty Selection View
+
+struct DifficultySelectionView: View {
+    @ObservedObject var gameState: RaceGameState
+    let dismiss: DismissAction
+    
+    var body: some View {
+        ZStack {
+            Color.blue.opacity(0.2)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                Text("Choose Difficulty")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.brown)
+                
+                Text("🏁 Race the Loo 🚽")
+                    .font(.title2)
+                    .foregroundColor(.secondary)
+                
+                VStack(spacing: 20) {
+                    DifficultyButton(
+                        difficulty: .easy,
+                        icon: "😊",
+                        color: .green,
+                        gameState: gameState
+                    )
+                    
+                    DifficultyButton(
+                        difficulty: .medium,
+                        icon: "😐",
+                        color: .orange,
+                        gameState: gameState
+                    )
+                    
+                    DifficultyButton(
+                        difficulty: .hard,
+                        icon: "😰",
+                        color: .red,
+                        gameState: gameState
+                    )
+                }
+                .padding()
+                
+                Button("BACK") {
+                    gameState.gamePhase = .welcome
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(width: 200, height: 50)
+                .background(Color.brown)
+                .cornerRadius(10)
+            }
+        }
+    }
+}
+
+struct DifficultyButton: View {
+    let difficulty: Difficulty
+    let icon: String
+    let color: Color
+    @ObservedObject var gameState: RaceGameState
+    
+    var body: some View {
+        Button(action: {
+            gameState.selectedDifficulty = difficulty
+            gameState.gamePhase = .selectTrack
+        }) {
+            HStack(spacing: 15) {
+                Text(icon)
+                    .font(.system(size: 40))
+                
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(difficulty.displayName)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text("Poo speed: \(Int(difficulty.aiMaxSpeed * 60)) MPH")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(color)
+            .cornerRadius(15)
+        }
+        .frame(width: 300)
+    }
+}
+
+// MARK: - Track Selection View
+
+struct TrackSelectionView: View {
+    @ObservedObject var gameState: RaceGameState
+    let dismiss: DismissAction
+    
+    var body: some View {
+        ZStack {
+            Color.blue.opacity(0.2)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                Text("Choose Track")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.brown)
+                
+                Text("Difficulty: \(gameState.selectedDifficulty.displayName)")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        TrackButton(
+                            track: .straightaway,
+                            icon: "→",
+                            gameState: gameState
+                        )
+                        
+                        TrackButton(
+                            track: .sCurve,
+                            icon: "〰️",
+                            gameState: gameState
+                        )
+                        
+                        TrackButton(
+                            track: .hairpin,
+                            icon: "↪️",
+                            gameState: gameState
+                        )
+                        
+                        TrackButton(
+                            track: .chicane,
+                            icon: "⚡️",
+                            gameState: gameState
+                        )
+                    }
+                    .padding()
+                }
+                
+                Button("BACK") {
+                    gameState.gamePhase = .selectDifficulty
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(width: 200, height: 50)
+                .background(Color.brown)
+                .cornerRadius(10)
+            }
+        }
+    }
+}
+
+struct TrackButton: View {
+    let track: TrackType
+    let icon: String
+    @ObservedObject var gameState: RaceGameState
+    
+    var body: some View {
+        Button(action: {
+            gameState.selectedTrack = track
+            gameState.startRace()
+        }) {
+            HStack(spacing: 15) {
+                Text(icon)
+                    .font(.system(size: 40))
+                
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(track.displayName)
+                        .font(.title3)
+                        .fontWeight(.bold)
+                    
+                    Text(track.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.blue, Color.purple]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(15)
+        }
+        .frame(width: 320)
+    }
+}
+
 // MARK: - Racing View
 
 struct RacingView: View {
@@ -225,7 +658,7 @@ struct RacingView: View {
             
             // Road with perspective
             GeometryReader { geo in
-                RoadView(raceProgress: gameState.raceProgress)
+                RoadView(raceProgress: gameState.raceProgress, trackType: gameState.selectedTrack)
                 
                 // Finish line
                 if gameState.raceProgress > 85 {
@@ -301,24 +734,6 @@ struct RacingView: View {
                 
                 // Controls
                 VStack(spacing: 15) {
-                    // Brake button
-                    Button(action: { gameState.brake() }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 60, height: 60)
-                            
-                            VStack(spacing: 2) {
-                                Text("BRAKE")
-                                    .font(.system(size: 10))
-                                    .fontWeight(.bold)
-                                Image(systemName: "octagon.fill")
-                                    .font(.system(size: 20))
-                            }
-                            .foregroundColor(.white)
-                        }
-                    }
-                    
                     HStack(spacing: 40) {
                         // Interactive Steering Wheel
                         SteeringWheelView(gameState: gameState)
@@ -326,8 +741,29 @@ struct RacingView: View {
                         
                         Spacer()
                         
-                        // Gas pedal - Press and hold
-                        GasPedalView(gameState: gameState)
+                        // Brake and Gas pedals (vertical stack)
+                        VStack(spacing: 15) {
+                            // Brake button (on top)
+                            Button(action: { gameState.brake() }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 70, height: 70)
+                                    
+                                    VStack(spacing: 2) {
+                                        Text("BRAKE")
+                                            .font(.system(size: 10))
+                                            .fontWeight(.bold)
+                                        Image(systemName: "octagon.fill")
+                                            .font(.system(size: 22))
+                                    }
+                                    .foregroundColor(.white)
+                                }
+                            }
+                            
+                            // Gas pedal - Press and hold (below brake)
+                            GasPedalView(gameState: gameState)
+                        }
                     }
                 }
                 .padding(.horizontal, 30)
@@ -507,6 +943,12 @@ struct SteeringWheelView: View {
 
 struct RoadView: View {
     let raceProgress: CGFloat
+    let trackType: TrackType
+    
+    init(raceProgress: CGFloat, trackType: TrackType = .straightaway) {
+        self.raceProgress = raceProgress
+        self.trackType = trackType
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -554,20 +996,20 @@ struct RoadView: View {
                 }
                 
                 // Determine turn amount based on progress
-                let turnAmount = getTurnAmount(progress: raceProgress)
+                let turnAmount = getTurnAmount(progress: raceProgress, trackType: trackType)
                 
                 // Road with turn
                 Path { path in
                     let width = geometry.size.width
                     let height = geometry.size.height
                     
-                    // Road shifts right during the turn
-                    let leftEdge = 0.25 + turnAmount * 0.15
-                    let rightEdge = 0.75 + turnAmount * 0.15
+                    // Road shifts based on turn amount (increased multiplier for dramatic curves)
+                    let leftEdge = 0.25 + turnAmount * 0.35
+                    let rightEdge = 0.75 + turnAmount * 0.35
                     
                     path.move(to: CGPoint(x: width * leftEdge, y: height))
-                    path.addLine(to: CGPoint(x: width * (0.4 + turnAmount * 0.1), y: 0))
-                    path.addLine(to: CGPoint(x: width * (0.6 + turnAmount * 0.1), y: 0))
+                    path.addLine(to: CGPoint(x: width * (0.4 + turnAmount * 0.25), y: 0))
+                    path.addLine(to: CGPoint(x: width * (0.6 + turnAmount * 0.25), y: 0))
                     path.addLine(to: CGPoint(x: width * rightEdge, y: height))
                     path.closeSubpath()
                 }
@@ -577,16 +1019,16 @@ struct RoadView: View {
                 Path { path in
                     let width = geometry.size.width
                     let height = geometry.size.height
-                    let leftEdge = 0.25 + turnAmount * 0.15
-                    let rightEdge = 0.75 + turnAmount * 0.15
+                    let leftEdge = 0.25 + turnAmount * 0.35
+                    let rightEdge = 0.75 + turnAmount * 0.35
                     
                     // Left edge
                     path.move(to: CGPoint(x: width * leftEdge, y: height))
-                    path.addLine(to: CGPoint(x: width * (0.4 + turnAmount * 0.1), y: 0))
+                    path.addLine(to: CGPoint(x: width * (0.4 + turnAmount * 0.25), y: 0))
                     
                     // Right edge
                     path.move(to: CGPoint(x: width * rightEdge, y: height))
-                    path.addLine(to: CGPoint(x: width * (0.6 + turnAmount * 0.1), y: 0))
+                    path.addLine(to: CGPoint(x: width * (0.6 + turnAmount * 0.25), y: 0))
                 }
                 .stroke(Color.white, lineWidth: 4)
                 
@@ -595,10 +1037,10 @@ struct RoadView: View {
                     for i in 0..<20 {
                         let progress = CGFloat(i) / 20.0
                         let y = size.height - (progress * size.height)
-                        let leftEdge = 0.25 + turnAmount * 0.15
-                        let rightEdge = 0.75 + turnAmount * 0.15
-                        let topLeftX = 0.4 + turnAmount * 0.1
-                        let topRightX = 0.6 + turnAmount * 0.1
+                        let leftEdge = 0.25 + turnAmount * 0.35
+                        let rightEdge = 0.75 + turnAmount * 0.35
+                        let topLeftX = 0.4 + turnAmount * 0.25
+                        let topRightX = 0.6 + turnAmount * 0.25
                         
                         if y >= 0 && y <= size.height {
                             let leftX = size.width * (leftEdge + (topLeftX - leftEdge) * progress)
@@ -629,7 +1071,7 @@ struct RoadView: View {
                         
                         if y >= 0 && y <= size.height {
                             let lineWidth = 4 + (1 - progress) * 8
-                            let centerX = 0.5 + turnAmount * 0.1 * progress
+                            let centerX = 0.5 + turnAmount * 0.25 * progress
                             
                             let rect = Rectangle()
                                 .path(in: CGRect(
@@ -648,8 +1090,8 @@ struct RoadView: View {
                 if raceProgress < 20 || raceProgress > 480 {
                     Canvas { context, size in
                         let lineY = raceProgress < 20 ? size.height * 0.7 : size.height * 0.3
-                        let leftEdge = 0.25 + turnAmount * 0.15
-                        let rightEdge = 0.75 + turnAmount * 0.15
+                        let leftEdge = 0.25 + turnAmount * 0.35
+                        let rightEdge = 0.75 + turnAmount * 0.35
                         
                         for x in 0..<20 {
                             for y in 0..<3 {
@@ -701,18 +1143,89 @@ struct RoadView: View {
         }
     }
     
-    // Calculate turn amount based on race progress (turn happens between 200-350)
-    func getTurnAmount(progress: CGFloat) -> CGFloat {
-        if progress < 200 {
-            return 0
-        } else if progress < 275 {
-            // Entering turn
-            return (progress - 200) / 75.0
-        } else if progress < 350 {
-            // Exiting turn
-            return 1.0 - (progress - 275) / 75.0
-        } else {
-            return 0
+    // Calculate turn amount based on race progress and track type
+    func getTurnAmount(progress: CGFloat, trackType: TrackType) -> CGFloat {
+        switch trackType {
+        case .straightaway:
+            // Original single right turn
+            if progress < 200 {
+                return 0
+            } else if progress < 275 {
+                return (progress - 200) / 75.0
+            } else if progress < 350 {
+                return 1.0 - (progress - 275) / 75.0
+            } else {
+                return 0
+            }
+            
+        case .sCurve:
+            // S-curve: right then left then right
+            if progress < 100 {
+                return 0
+            } else if progress < 150 {
+                // Right turn
+                return (progress - 100) / 50.0
+            } else if progress < 200 {
+                // Transition to left
+                return 1.0 - (progress - 150) / 50.0
+            } else if progress < 250 {
+                // Left turn (negative)
+                return -((progress - 200) / 50.0)
+            } else if progress < 300 {
+                // Transition back
+                return -(1.0 - (progress - 250) / 50.0)
+            } else if progress < 350 {
+                // Final right turn
+                return (progress - 300) / 50.0
+            } else if progress < 400 {
+                return 1.0 - (progress - 350) / 50.0
+            } else {
+                return 0
+            }
+            
+        case .hairpin:
+            // Sharp hairpin turn
+            if progress < 150 {
+                return 0
+            } else if progress < 220 {
+                // Sharp right turn (stronger curve)
+                return ((progress - 150) / 70.0) * 1.5
+            } else if progress < 280 {
+                // Hold the turn
+                return 1.5
+            } else if progress < 350 {
+                // Exit turn
+                return 1.5 - ((progress - 280) / 70.0) * 1.5
+            } else {
+                return 0
+            }
+            
+        case .chicane:
+            // Quick left-right-left chicane
+            if progress < 120 {
+                return 0
+            } else if progress < 160 {
+                // Quick left
+                return -((progress - 120) / 40.0) * 0.8
+            } else if progress < 200 {
+                // Quick right
+                return -0.8 + ((progress - 160) / 40.0) * 1.6
+            } else if progress < 240 {
+                // Quick left again
+                return 0.8 - ((progress - 200) / 40.0) * 1.6
+            } else if progress < 280 {
+                // Back to center
+                return -0.8 + ((progress - 240) / 40.0) * 0.8
+            } else if progress < 340 {
+                // Another chicane
+                return -((progress - 280) / 30.0) * 0.6
+            } else if progress < 380 {
+                return -0.6 + ((progress - 340) / 40.0) * 1.2
+            } else if progress < 420 {
+                return 0.6 - ((progress - 380) / 40.0) * 0.6
+            } else {
+                return 0
+            }
         }
     }
 }
@@ -779,22 +1292,69 @@ struct FinishView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 30) {
-                if gameState.winner == "You" {
-                    Text("🏆 YOU WIN! 🏆")
-                        .font(.system(size: 48, weight: .bold))
-                        .foregroundColor(.green)
-                    
-                    Text("You reached the restroom first!")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
+                if let crashType = gameState.crashType {
+                    // Crash scenario
+                    if crashType == .wall {
+                        Text("💥 CRASH! 💥")
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.red)
+                        
+                        if gameState.winner == "You" {
+                            Text("Poo hit the wall!")
+                                .font(.title2)
+                                .foregroundColor(.secondary)
+                            Text("You win by default! 🏆")
+                                .font(.title3)
+                                .foregroundColor(.green)
+                        } else {
+                            Text("You crashed into the wall!")
+                                .font(.title2)
+                                .foregroundColor(.secondary)
+                            Text("Poo wins! 💩")
+                                .font(.title3)
+                                .foregroundColor(.brown)
+                        }
+                    } else {
+                        // Collision
+                        Text("💥 COLLISION! 💥")
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.orange)
+                        
+                        Text("The racers crashed into each other!")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        if gameState.winner == "You" {
+                            Text("You were ahead! 🏆")
+                                .font(.title3)
+                                .foregroundColor(.green)
+                        } else {
+                            Text("Poo was ahead! 💩")
+                                .font(.title3)
+                                .foregroundColor(.brown)
+                        }
+                    }
                 } else {
-                    Text("💩 POO WINS! 💩")
-                        .font(.system(size: 48, weight: .bold))
-                        .foregroundColor(.brown)
-                    
-                    Text("The poo beat you to the toilet!")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
+                    // Normal finish
+                    if gameState.winner == "You" {
+                        Text("🏆 YOU WIN! 🏆")
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.green)
+                        
+                        Text("You reached the restroom first!")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("💩 POO WINS! 💩")
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.brown)
+                        
+                        Text("The poo beat you to the toilet!")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Button("RACE AGAIN") {
